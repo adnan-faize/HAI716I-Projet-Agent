@@ -24,17 +24,18 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 __all__ = [
     "ErreurFichier",
+    "Trace",
+    "charger_armoire",
     "charger_carte",
     "charger_dictionnaire",
-    "charger_armoire",
     "charger_scenario",
     "normaliser",
-    "Trace",
 ]
 
 VERSION_ATTENDUE = 1
@@ -48,7 +49,7 @@ class ErreurFichier(Exception):
 # Lecture
 # ---------------------------------------------------------------------------
 
-def _lire_json(chemin: str | Path, format_attendu: str) -> Dict[str, Any]:
+def _lire_json(chemin: str | Path, format_attendu: str) -> dict[str, Any]:
     """Lit un fichier JSON UTF-8 et verifie son en-tete.
 
     Ce qui EST verifie ici :
@@ -106,22 +107,22 @@ def _lire_json(chemin: str | Path, format_attendu: str) -> Dict[str, Any]:
     return donnees
 
 
-def charger_carte(chemin: str | Path) -> Dict[str, Any]:
+def charger_carte(chemin: str | Path) -> dict[str, Any]:
     """Charge un fichier carte. Voir l'enonce, section 5.1."""
     return _lire_json(chemin, "robot-reconfort/carte")
 
 
-def charger_dictionnaire(chemin: str | Path) -> Dict[str, Any]:
+def charger_dictionnaire(chemin: str | Path) -> dict[str, Any]:
     """Charge un fichier dictionnaire. Voir l'enonce, section 5.2."""
     return _lire_json(chemin, "robot-reconfort/dictionnaire")
 
 
-def charger_armoire(chemin: str | Path) -> Dict[str, Any]:
+def charger_armoire(chemin: str | Path) -> dict[str, Any]:
     """Charge un fichier armoire. Voir l'enonce, section 5.3."""
     return _lire_json(chemin, "robot-reconfort/armoire")
 
 
-def charger_scenario(chemin: str | Path) -> Dict[str, Any]:
+def charger_scenario(chemin: str | Path) -> dict[str, Any]:
     """Charge un fichier scenario. Voir l'enonce, section 5.4."""
     return _lire_json(chemin, "robot-reconfort/scenario")
 
@@ -130,7 +131,7 @@ def charger_scenario(chemin: str | Path) -> Dict[str, Any]:
 # Normalisation des messages
 # ---------------------------------------------------------------------------
 
-def normaliser(texte: str) -> List[str]:
+def normaliser(texte: str) -> list[str]:
     """Decoupe un message en mots comparables au dictionnaire.
 
     Minuscules, accents retires, decoupage sur tout ce qui n'est pas une
@@ -144,8 +145,8 @@ def normaliser(texte: str) -> List[str]:
     sans_accents = "".join(
         c for c in decompose if unicodedata.category(c) != "Mn"
     )
-    mots: List[str] = []
-    courant: List[str] = []
+    mots: list[str] = []
+    courant: list[str] = []
     for caractere in sans_accents:
         if caractere.isalpha():
             courant.append(caractere)
@@ -191,26 +192,26 @@ class Trace:
         self,
         nom_carte: str,
         nom_scenario: str,
-        equipe: Optional[Sequence[str]] = None,
+        equipe: Sequence[str] | None = None,
     ) -> None:
         self.nom_carte = nom_carte
         self.nom_scenario = nom_scenario
-        self.equipe: List[str] = list(equipe or [])
-        self.pas: List[Dict[str, Any]] = []
-        self.livraisons: List[Dict[str, Any]] = []
+        self.equipe: list[str] = list(equipe or [])
+        self.pas: list[dict[str, Any]] = []
+        self.livraisons: list[dict[str, Any]] = []
 
     # -- pas ---------------------------------------------------------------
 
     def ajouter_pas(
         self,
-        demande: Optional[int],
+        demande: int | None,
         position: Sequence[int],
         casier: Sequence[int],
         action: str,
-        argument: Optional[str] = None,
-        perception: Optional[Dict[str, str]] = None,
-        contenu_casier: Optional[str] = None,
-        commentaire: Optional[str] = None,
+        argument: str | None = None,
+        perception: dict[str, str] | None = None,
+        contenu_casier: str | None = None,
+        commentaire: str | None = None,
     ) -> None:
         """Enregistre un pas de simulation.
 
@@ -250,13 +251,13 @@ class Trace:
         self,
         demande: int,
         resident: str,
-        emotion: Optional[str],
-        intensite: Optional[str],
-        casier_choisi: Optional[Sequence[int]],
+        emotion: str | None,
+        intensite: str | None,
+        casier_choisi: Sequence[int] | None,
         repli: str,
-        objet: Optional[str],
+        objet: str | None,
         succes: bool,
-        motif_echec: Optional[str] = None,
+        motif_echec: str | None = None,
     ) -> None:
         """Enregistre l'issue d'une demande, reussie ou non.
 
@@ -286,7 +287,7 @@ class Trace:
 
     # -- export ------------------------------------------------------------
 
-    def en_dictionnaire(self) -> Dict[str, Any]:
+    def en_dictionnaire(self) -> dict[str, Any]:
         reussies = sum(1 for l in self.livraisons if l["succes"])
         return {
             "format": "robot-reconfort/trace",
