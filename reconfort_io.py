@@ -218,7 +218,32 @@ def _verifier_dictionnaire(donnees: dict) -> None:
 
 
 def _verifier_scenario(donnees: dict) -> None:
-    pass # TODO
+    _verifier_champs(donnees, {
+        "nom": str,
+        "carte": str,
+        "armoire": str,
+        "demandes": list
+    })
+
+    numeros_vus = set()
+    for demande in donnees["demandes"]:
+        if not isinstance(demande, dict):
+            raise ErreurFichier(f"Demande invalide : {demande} (chaque demande doit être un objet JSON (dictionnaire))")
+
+        champs_demande = { "numero": int, "resident": str, "message": str }
+        for cle, type_attendu in champs_demande.items():
+            if cle not in demande:
+                raise ErreurFichier(f"Champ obligatoire manquant dans une demande : '{cle}'")
+            if not isinstance(demande[cle], type_attendu):
+                raise ErreurFichier(
+                    f"Champ '{cle}' de type {type(demande[cle]).__name__}, "
+                    f"attendu {type_attendu.__name__}"
+                )
+
+        numero = demande["numero"]
+        if numero in numeros_vus:
+            raise ErreurFichier(f"Numero de demande duplique : {numero}")
+        numeros_vus.add(numero)
 
 
 # ---------------------------------------------------------------------------
