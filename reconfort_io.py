@@ -44,27 +44,189 @@ VERSION_ATTENDUE = 1
 class ErreurFichier(Exception):
     """Fichier d'entree absent, illisible, ou d'un type inattendu."""
 
+# ---------------------------------------------------------------------------
+# Helpeurs de validation
+# ---------------------------------------------------------------------------
+
+def _verifier_champs(donnees: dict, champs_attendus: dict[str, type]) -> None:
+    """Verifie la presence et le type des champs obligatoires a la racine."""
+    for champ, type_attendu in champs_attendus.items():
+        if champ not in donnees:
+            raise ErreurFichier(f"Champ obligatoire manquant : '{champ}'")
+        if not isinstance(donnees[champ], type_attendu):
+            raise ErreurFichier(
+                f"Champ '{champ}' de type {type(donnees[champ]).__name__}, "
+                f"attendu {type_attendu.__name__}"
+            )
+
+
+def _verifier_limites(pos: list[int], hauteur: int, largeur: int, nom: str) -> None:
+    """Verifie qu'une position (ligne, colonne) est dans les limites de la carte."""
+    if not isinstance(pos, list) or len(pos) != 2:
+        raise ErreurFichier(f"{nom} doit etre une liste de deux entiers (ligne, colonne)")
+    ligne, colonne = pos
+    if not isinstance(ligne, int) or not isinstance(colonne, int):
+        raise ErreurFichier(f"{nom} doit etre une liste de deux entiers (ligne, colonne)")
+    if not (0 <= ligne < hauteur) or not (0 <= colonne < largeur):
+        raise ErreurFichier(
+            f"{nom} {pos} hors limites de la carte "
+            f"(hauteur={hauteur}, largeur={largeur})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Vérifications spécifiques par fichier
+# ---------------------------------------------------------------------------
+
+def _verifier_carte(donnees: dict) -> None:
+    _verifier_champs(donnees, {
+        "nom": str,
+        "dimensions": dict,
+        "legende": dict,
+        "grille": list,
+        "depart_robot": list,
+        "armoire": dict,
+        "dictionnaire": dict,
+        "residents": list
+    })
+
+    h = donnees["dimensions"].get("hauteur")
+    l = donnees["dimensions"].get("largeur")
+    if not isinstance(h, int) or not isinstance(l, int):
+        raise ErreurFichier("dimensions doit contenir des entiers 'hauteur' et 'largeur'")
+
+    grille = donnees["grille"]
+    if len(grille) != h:
+        raise ErreurFichier(f"grille doit avoir {h} lignes, trouve {len(grille)}")
+    for i, ligne in enumerate(grille):
+        if len(ligne) != l:
+            raise ErreurFichier(f"Grille non rectangulaire : ligne {i} de la grille doit avoir {l} colonnes, trouve {len(ligne)}")
+
+    inv_legende = {v: k for k, v in donnees["legende"].items()}
+
+    entites = [
+        ("depart du robot", donnees["depart_robot"]),
+        ("armoire", donnees["armoire"].get("position")),
+        ("dictionnaire", donnees["dictionnaire"].get("position"))
+    ]
+
+    for nom_entite, pos in entites:
+        symbole = inv_legende.get(nom_entite)
+        if not symbole:
+            raise ErreurFichier(f"Legende manquante pour l'entite '{nom_entite}'")
+        _verifier_limites(pos, h, l, nom_entite)
+        if grille[pos[0]][pos[1]] != symbole:
+            raise ErreurFichier(
+                f"Position de l'entite '{nom_entite}' {pos} ne correspond pas "
+                f"a la grille (symbole attendu '{symbole}', trouve '{grille[pos[0]][pos[1]]}')"
+            )
+
+    sym_res = inv_legende.get("resident")
+    if not sym_res:
+        raise ErreurFichier("Legende manquante pour l'entite 'resident'")
+
+    ids_vus = set()
+    for res in donnees["residents"]:
+        r_id = res.get("id")
+        r_pos = res.get("position")
+        if not r_id:
+            raise ErreurFichier(f"Resident sans id : {res}")
+        if r_id in ids_vus:
+            raise ErreurFichier(f"Resident duplique avec id {r_id!r}")
+        ids_vus.add(r_id)
+
+        _verifier_limites(r_pos, h, l, f"resident {r_id}")
+        if grille[r_pos[0]][r_pos[1]] != sym_res:
+            raise ErreurFichier(
+                f"Position du resident {r_id} {r_pos} ne correspond pas "
+                f"a la grille (symbole attendu '{sym_res}', trouve '{grille[r_pos[0]][r_pos[1]]}')"
+            )
+
+
+def _verifier_armoire(donnees: dict) -> None:
+    _verifier_champs(donnees, {
+        "nom": str,
+        "emotions": list,
+        "intensites": list,
+        "casier_depart": list,
+        "casiers": list
+    })
+
+    emotions = donnees["emotions"]
+    intensites = donnees["intensites"]
+    hauteur_armoire = len(intensites)
+    largeur_armoire = len(emotions)
+
+    _verifier_limites(donnees["casier_depart"], hauteur_armoire, largeur_armoire, "casier_depart")
+
+    positions_vues = set()
+
+    for casier in donnees["casiers"]:
+        ligne = casier.get("ligne")
+        colonne = casier.get("colonne")
+        emotion = casier.get("emotion")
+        intensite = casier.get("intensite")
+
+        if ligne is None or colonne is None or emotion is None or intensite is None:
+            raise ErreurFichier(f"Casier incomplet : {casier}")
+
+        pos = [ligne, colonne]
+        _verifier_limites(pos, hauteur_armoire, largeur_armoire, "casier")
+
+        if (ligne, colonne) in positions_vues:
+            raise ErreurFichier(f"Casier duplique a la position {pos}")
+        positions_vues.add((ligne, colonne))
+
+        if emotions[colonne] != emotion:
+            raise ErreurFichier(
+                f"Emotion du casier {pos} ({emotion}) ne correspond pas "
+                f"a la colonne {colonne} de la liste d'emotions ({emotions[colonne]})"
+            )
+        if intensites[ligne] != intensite:
+            raise ErreurFichier(
+                f"Intensite du casier {pos} ({intensite}) ne correspond pas "
+                f"a la ligne {ligne} de la liste d'intensites ({intensites[ligne]})"
+            )
+
+
+def _verifier_dictionnaire(donnees: dict) -> None:
+    _verifier_champs(donnees, {
+        "nom": str,
+        "emotions": list,
+        "intensites": list,
+        "entrees": list
+    })
+
+    emotions_connues = set(donnees["emotions"])
+    intensites_connues = set(donnees["intensites"])
+    mots_vus = set()
+
+    for entree in donnees["entrees"]:
+        emotion = entree.get("emotion")
+        intensite = entree.get("intensite")
+        formes = entree.get("formes", [])
+
+        if emotion not in emotions_connues:
+            raise ErreurFichier(f"Emotion inconnue dans dictionnaire : {emotion!r}")
+        if intensite not in intensites_connues:
+            raise ErreurFichier(f"Intensite inconnue dans dictionnaire : {intensite!r}")
+
+        for mot in formes:
+            if mot in mots_vus:
+                raise ErreurFichier(f"Mot duplique dans dictionnaire : {mot!r}")
+            mots_vus.add(mot)
+
+
+def _verifier_scenario(donnees: dict) -> None:
+    pass # TODO
+
 
 # ---------------------------------------------------------------------------
 # Lecture
 # ---------------------------------------------------------------------------
 
 def _lire_json(chemin: str | Path, format_attendu: str) -> dict[str, Any]:
-    """Lit un fichier JSON UTF-8 et verifie son en-tete.
-
-    Ce qui EST verifie ici :
-      - le fichier existe et se lit en UTF-8 ;
-      - son contenu est du JSON valide ;
-      - la racine est un objet ;
-      - les champs "format" et "version" sont presents et corrects.
-
-    Ce qui n'est PAS verifie (a vous de le faire, enonce section 5.6) :
-      - la presence et le type de chacun des autres champs ;
-      - la coherence des donnees (grille rectangulaire, positions dans les
-        bornes, resident pose sur un mur, casier hors de l'armoire,
-        emotion inconnue, resident cite par un scenario mais absent de la
-        carte...).
-    """
+    """Lit un fichier JSON UTF-8 et verifie son en-tete."""
     chemin = Path(chemin)
     try:
         texte = chemin.read_text(encoding="utf-8")
@@ -104,6 +266,15 @@ def _lire_json(chemin: str | Path, format_attendu: str) -> dict[str, Any]:
             f"{chemin} : version {VERSION_ATTENDUE} attendue, trouve {version!r}"
         )
 
+    if format_attendu == "robot-reconfort/carte":
+        _verifier_carte(donnees)
+    elif format_attendu == "robot-reconfort/dictionnaire":
+        _verifier_dictionnaire(donnees)
+    elif format_attendu == "robot-reconfort/armoire":
+        _verifier_armoire(donnees)
+    elif format_attendu == "robot-reconfort/scenario":
+        _verifier_scenario(donnees)
+    
     return donnees
 
 
