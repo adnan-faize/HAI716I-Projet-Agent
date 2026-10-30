@@ -89,4 +89,6 @@ class RouePlutchick:
         return candidats
 
     def deplacement_selecteur(self, depart, arrivee) -> list[str]:
+        """
+        """
         return []
