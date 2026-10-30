@@ -44,6 +44,38 @@ VERSION_ATTENDUE = 1
 class ErreurFichier(Exception):
     """Fichier d'entree absent, illisible, ou d'un type inattendu."""
 
+
+# ---------------------------------------------------------------------------
+# Normalisation des messages
+# ---------------------------------------------------------------------------
+
+def normaliser(texte: str) -> list[str]:
+    """Decoupe un message en mots comparables au dictionnaire.
+
+    Minuscules, accents retires, decoupage sur tout ce qui n'est pas une
+    lettre. C'est exactement la regle de l'enonce, section 6.1 ;
+    reimplementez-la vous-meme si vous travaillez dans un autre langage.
+
+        >>> normaliser("Je suis TERRIFIEE, vraiment !")
+        ['je', 'suis', 'terrifiee', 'vraiment']
+    """
+    decompose = unicodedata.normalize("NFD", texte.lower())
+    sans_accents = "".join(
+        c for c in decompose if unicodedata.category(c) != "Mn"
+    )
+    mots: list[str] = []
+    courant: list[str] = []
+    for caractere in sans_accents:
+        if caractere.isalpha():
+            courant.append(caractere)
+        elif courant:
+            mots.append("".join(courant))
+            courant = []
+    if courant:
+        mots.append("".join(courant))
+    return mots
+
+
 # ---------------------------------------------------------------------------
 # Helpeurs de validation
 # ---------------------------------------------------------------------------
@@ -104,6 +136,32 @@ def _verifier_carte(donnees: dict) -> None:
 
     inv_legende = {v: k for k, v in donnees["legende"].items()}
 
+    sym_depart = inv_legende.get("depart du robot")
+    sym_armoire = inv_legende.get("armoire")
+    sym_dico = inv_legende.get("dictionnaire")
+    sym_res = inv_legende.get("resident")
+    if not all([sym_depart, sym_armoire, sym_dico, sym_res]):
+        raise ErreurFichier("Legende manquante pour 'depart du robot', 'armoire', 'dictionnaire' ou 'resident'")
+
+    ids_vus = set()
+    for res in donnees["residents"]:
+        r_id = res.get("id")
+        if not r_id:
+            raise ErreurFichier(f"resident sans id: {res}")
+        if r_id in ids_vus:
+            raise ErreurFichier(f"resident avec id en double détecté : '{r_id}'")
+        ids_vus.add(r_id)
+
+    texte_grille = "".join(grille)
+    if texte_grille.count(sym_depart) != 1:
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour le depart du robot ({sym_depart}), trouve {texte_grille.count(sym_depart)}")
+    if texte_grille.count(sym_armoire) != 1:
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour l'armoire ({sym_armoire}), trouve {texte_grille.count(sym_armoire)}")
+    if texte_grille.count(sym_dico) != 1:
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour le dictionnaire ({sym_dico}), trouve {texte_grille.count(sym_dico)}")
+    if texte_grille.count(sym_res) != len(donnees["residents"]):
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour le resident ({sym_res}), trouve {texte_grille.count(sym_res)}")
+
     entites = [
         ("depart du robot", donnees["depart_robot"]),
         ("armoire", donnees["armoire"].get("position")),
@@ -121,21 +179,13 @@ def _verifier_carte(donnees: dict) -> None:
                 f"a la grille (symbole attendu '{symbole}', trouve '{grille[pos[0]][pos[1]]}')"
             )
 
-    sym_res = inv_legende.get("resident")
-    if not sym_res:
-        raise ErreurFichier("Legende manquante pour l'entite 'resident'")
-
-    ids_vus = set()
     for res in donnees["residents"]:
         r_id = res.get("id")
         r_pos = res.get("position")
-        if not r_id:
-            raise ErreurFichier(f"Resident sans id : {res}")
-        if r_id in ids_vus:
-            raise ErreurFichier(f"Resident duplique avec id {r_id!r}")
-        ids_vus.add(r_id)
-
-        _verifier_limites(r_pos, h, l, f"resident {r_id}")
+        if not (isinstance(r_pos, list) and len(r_pos) == 2 and isinstance(r_pos[0], int) and isinstance(r_pos[1], int)):
+            raise ErreurFichier(f"position du resident {r_id} invalide : {r_pos}")
+        if not (0 <= r_pos[0] < h) or not (0 <= r_pos[1] < l):
+            raise ErreurFichier(f"resident {r_id} a la posiiton {r_pos} hors de la grille")
         if grille[r_pos[0]][r_pos[1]] != sym_res:
             raise ErreurFichier(
                 f"Position du resident {r_id} {r_pos} ne correspond pas "
@@ -157,7 +207,13 @@ def _verifier_armoire(donnees: dict) -> None:
     hauteur_armoire = len(intensites)
     largeur_armoire = len(emotions)
 
-    _verifier_limites(donnees["casier_depart"], hauteur_armoire, largeur_armoire, "casier_depart")
+    cd = donnees["casier_depart"]
+    if not isinstance(cd, list) or len(cd) != 2 or not isinstance(cd[0], int) or not isinstance(cd[1], int):
+        raise ErreurFichier("casier_depart doit etre une liste de deux entiers")
+    if not (0 <= cd[0] < hauteur_armoire) or not (0 <= cd[1] < largeur_armoire):
+        raise ErreurFichier(
+            f"casier_depart hors des dimensions de l'armoire : {cd} (dimensions {hauteur_armoire}x{largeur_armoire})"
+        )
 
     positions_vues = set()
 
@@ -217,13 +273,25 @@ def _verifier_dictionnaire(donnees: dict) -> None:
             mots_vus.add(mot)
 
 
-def _verifier_scenario(donnees: dict) -> None:
+def _verifier_scenario(donnees: dict, carte: dict | None = None) -> None:
     _verifier_champs(donnees, {
         "nom": str,
         "carte": str,
         "armoire": str,
         "demandes": list
     })
+
+    if carte is not None:
+        if donnees.get("carte") != carte.get("nom"):
+            raise ErreurFichier(
+                f"scenario incompatible avec la carte : attendu '{carte.get('nom')}', trouve '{donnees.get('carte')}'"
+            )
+        res_connus = {r["id"] for r in carte.get("residents", [])}
+        for demande in donnees.get("demandes", []):
+            if demande.get("resident") not in res_connus:
+                raise ErreurFichier(
+                    f"demande {demande.get('numero')} adressee a un resident absent de la carte : '{demande.get('resident')}'"
+                )
 
     numeros_vus = set()
     for demande in donnees["demandes"]:
@@ -299,7 +367,7 @@ def _lire_json(chemin: str | Path, format_attendu: str) -> dict[str, Any]:
         _verifier_armoire(donnees)
     elif format_attendu == "robot-reconfort/scenario":
         _verifier_scenario(donnees)
-    
+
     return donnees
 
 
@@ -318,40 +386,12 @@ def charger_armoire(chemin: str | Path) -> dict[str, Any]:
     return _lire_json(chemin, "robot-reconfort/armoire")
 
 
-def charger_scenario(chemin: str | Path) -> dict[str, Any]:
+def charger_scenario(chemin: str | Path, carte: dict | None = None) -> dict[str, Any]:
     """Charge un fichier scenario. Voir l'enonce, section 5.4."""
-    return _lire_json(chemin, "robot-reconfort/scenario")
-
-
-# ---------------------------------------------------------------------------
-# Normalisation des messages
-# ---------------------------------------------------------------------------
-
-def normaliser(texte: str) -> list[str]:
-    """Decoupe un message en mots comparables au dictionnaire.
-
-    Minuscules, accents retires, decoupage sur tout ce qui n'est pas une
-    lettre. C'est exactement la regle de l'enonce, section 6.1 ;
-    reimplementez-la vous-meme si vous travaillez dans un autre langage.
-
-        >>> normaliser("Je suis TERRIFIEE, vraiment !")
-        ['je', 'suis', 'terrifiee', 'vraiment']
-    """
-    decompose = unicodedata.normalize("NFD", texte.lower())
-    sans_accents = "".join(
-        c for c in decompose if unicodedata.category(c) != "Mn"
-    )
-    mots: list[str] = []
-    courant: list[str] = []
-    for caractere in sans_accents:
-        if caractere.isalpha():
-            courant.append(caractere)
-        elif courant:
-            mots.append("".join(courant))
-            courant = []
-    if courant:
-        mots.append("".join(courant))
-    return mots
+    scenario = _lire_json(chemin, "robot-reconfort/scenario")
+    if carte is not None:
+        _verifier_scenario(scenario, carte)
+    return scenario
 
 
 # ---------------------------------------------------------------------------

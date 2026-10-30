@@ -13,8 +13,8 @@ from reconfort_io import (
 )
 
 CARTE_BASE = {
-    "format": "robot-reconfort/carte", 
-    "version": 1, 
+    "format": "robot-reconfort/carte",
+    "version": 1,
     "nom": "appartement_01",
     "dimensions": {"hauteur": 3, "largeur": 3},
     "legende": {"#": "mur", ".": "libre", "R": "depart du robot", "A": "armoire", "D": "dictionnaire", "P": "resident"},
@@ -30,10 +30,10 @@ CARTE_BASE = {
 }
 
 ARMOIRE_BASE = {
-    "format": "robot-reconfort/armoire", 
-    "version": 1, 
+    "format": "robot-reconfort/armoire",
+    "version": 1,
     "nom": "armoire_test",
-    "emotions": ["joie", "tristesse"], 
+    "emotions": ["joie", "tristesse"],
     "intensites": ["faible"],
     "casier_depart": [0, 0],
     "casiers": [
@@ -43,10 +43,10 @@ ARMOIRE_BASE = {
 }
 
 DICTIONNAIRE_BASE = {
-    "format": "robot-reconfort/dictionnaire", 
-    "version": 1, 
+    "format": "robot-reconfort/dictionnaire",
+    "version": 1,
     "nom": "dict_test",
-    "emotions": ["joie", "tristesse"], 
+    "emotions": ["joie", "tristesse"],
     "intensites": ["faible"],
     "entrees": [
         {"formes": ["heureux", "sourire"], "emotion": "joie", "intensite": "faible"},
@@ -55,10 +55,10 @@ DICTIONNAIRE_BASE = {
 }
 
 SCENARIO_BASE = {
-    "format": "robot-reconfort/scenario", 
-    "version": 1, 
+    "format": "robot-reconfort/scenario",
+    "version": 1,
     "nom": "scenario_01",
-    "carte": "appartement_01", 
+    "carte": "appartement_01",
     "armoire": "armoire_test",
     "demandes": [
         {"numero": 1, "resident": "R1", "message": "Je suis heureux"}
@@ -180,14 +180,14 @@ class TestReconfortIO(unittest.TestCase):
         scenario["carte"] = "mauvaise_carte"
         chemin = self.ecrire_json("scenario.json", scenario)
         with self.assertRaisesRegex(ErreurFichier, "incompatible avec la carte"):
-            charger_scenario(chemin)
+            charger_scenario(chemin, CARTE_BASE)
 
     def test_scenario_resident_inconnu(self):
         scenario = deepcopy(SCENARIO_BASE)
         scenario["demandes"][0]["resident"] = "R99" # N'existe pas sur CARTE_BASE
         chemin = self.ecrire_json("scenario.json", scenario)
         with self.assertRaisesRegex(ErreurFichier, "adressee a un resident absent"):
-            charger_scenario(chemin)
+            charger_scenario(chemin, CARTE_BASE)
 
 
 if __name__ == '__main__':
