@@ -46,25 +46,280 @@ class ErreurFichier(Exception):
 
 
 # ---------------------------------------------------------------------------
+# Normalisation des messages
+# ---------------------------------------------------------------------------
+
+def normaliser(texte: str) -> list[str]:
+    """Decoupe un message en mots comparables au dictionnaire.
+
+    Minuscules, accents retires, decoupage sur tout ce qui n'est pas une
+    lettre. C'est exactement la regle de l'enonce, section 6.1 ;
+    reimplementez-la vous-meme si vous travaillez dans un autre langage.
+
+        >>> normaliser("Je suis TERRIFIEE, vraiment !")
+        ['je', 'suis', 'terrifiee', 'vraiment']
+    """
+    decompose = unicodedata.normalize("NFD", texte.lower())
+    sans_accents = "".join(
+        c for c in decompose if unicodedata.category(c) != "Mn"
+    )
+    mots: list[str] = []
+    courant: list[str] = []
+    for caractere in sans_accents:
+        if caractere.isalpha():
+            courant.append(caractere)
+        elif courant:
+            mots.append("".join(courant))
+            courant = []
+    if courant:
+        mots.append("".join(courant))
+    return mots
+
+
+# ---------------------------------------------------------------------------
+# Helpeurs de validation
+# ---------------------------------------------------------------------------
+
+def _verifier_champs(donnees: dict, champs_attendus: dict[str, type]) -> None:
+    """Verifie la presence et le type des champs obligatoires a la racine."""
+    for champ, type_attendu in champs_attendus.items():
+        if champ not in donnees:
+            raise ErreurFichier(f"Champ obligatoire manquant : '{champ}'")
+        if not isinstance(donnees[champ], type_attendu):
+            raise ErreurFichier(
+                f"Champ '{champ}' de type {type(donnees[champ]).__name__}, "
+                f"attendu {type_attendu.__name__}"
+            )
+
+
+def _verifier_limites(pos: list[int], hauteur: int, largeur: int, nom: str) -> None:
+    """Verifie qu'une position (ligne, colonne) est dans les limites de la carte."""
+    if not isinstance(pos, list) or len(pos) != 2:
+        raise ErreurFichier(f"{nom} doit etre une liste de deux entiers (ligne, colonne)")
+    ligne, colonne = pos
+    if not isinstance(ligne, int) or not isinstance(colonne, int):
+        raise ErreurFichier(f"{nom} doit etre une liste de deux entiers (ligne, colonne)")
+    if not (0 <= ligne < hauteur) or not (0 <= colonne < largeur):
+        raise ErreurFichier(
+            f"{nom} {pos} hors limites de la carte "
+            f"(hauteur={hauteur}, largeur={largeur})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Vérifications spécifiques par fichier
+# ---------------------------------------------------------------------------
+
+def _verifier_carte(donnees: dict) -> None:
+    _verifier_champs(donnees, {
+        "nom": str,
+        "dimensions": dict,
+        "legende": dict,
+        "grille": list,
+        "depart_robot": list,
+        "armoire": dict,
+        "dictionnaire": dict,
+        "residents": list
+    })
+
+    h = donnees["dimensions"].get("hauteur")
+    l = donnees["dimensions"].get("largeur")
+    if not isinstance(h, int) or not isinstance(l, int):
+        raise ErreurFichier("dimensions doit contenir des entiers 'hauteur' et 'largeur'")
+
+    grille = donnees["grille"]
+    if len(grille) != h:
+        raise ErreurFichier(f"grille doit avoir {h} lignes, trouve {len(grille)}")
+    for i, ligne in enumerate(grille):
+        if len(ligne) != l:
+            raise ErreurFichier(f"Grille non rectangulaire : ligne {i} de la grille doit avoir {l} colonnes, trouve {len(ligne)}")
+
+    inv_legende = {v: k for k, v in donnees["legende"].items()}
+
+    sym_depart = inv_legende.get("depart du robot")
+    sym_armoire = inv_legende.get("armoire")
+    sym_dico = inv_legende.get("dictionnaire")
+    sym_res = inv_legende.get("resident")
+    if not all([sym_depart, sym_armoire, sym_dico, sym_res]):
+        raise ErreurFichier("Legende manquante pour 'depart du robot', 'armoire', 'dictionnaire' ou 'resident'")
+
+    ids_vus = set()
+    for res in donnees["residents"]:
+        r_id = res.get("id")
+        if not r_id:
+            raise ErreurFichier(f"resident sans id: {res}")
+        if r_id in ids_vus:
+            raise ErreurFichier(f"resident avec id en double détecté : '{r_id}'")
+        ids_vus.add(r_id)
+
+    texte_grille = "".join(grille)
+    if texte_grille.count(sym_depart) != 1:
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour le depart du robot ({sym_depart}), trouve {texte_grille.count(sym_depart)}")
+    if texte_grille.count(sym_armoire) != 1:
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour l'armoire ({sym_armoire}), trouve {texte_grille.count(sym_armoire)}")
+    if texte_grille.count(sym_dico) != 1:
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour le dictionnaire ({sym_dico}), trouve {texte_grille.count(sym_dico)}")
+    if texte_grille.count(sym_res) != len(donnees["residents"]):
+        raise ErreurFichier(f"Grille doit contenir exactement un symbole pour le resident ({sym_res}), trouve {texte_grille.count(sym_res)}")
+
+    entites = [
+        ("depart du robot", donnees["depart_robot"]),
+        ("armoire", donnees["armoire"].get("position")),
+        ("dictionnaire", donnees["dictionnaire"].get("position"))
+    ]
+
+    for nom_entite, pos in entites:
+        symbole = inv_legende.get(nom_entite)
+        if not symbole:
+            raise ErreurFichier(f"Legende manquante pour l'entite '{nom_entite}'")
+        _verifier_limites(pos, h, l, nom_entite)
+        if grille[pos[0]][pos[1]] != symbole:
+            raise ErreurFichier(
+                f"Position de l'entite '{nom_entite}' {pos} ne correspond pas "
+                f"a la grille (symbole attendu '{symbole}', trouve '{grille[pos[0]][pos[1]]}')"
+            )
+
+    for res in donnees["residents"]:
+        r_id = res.get("id")
+        r_pos = res.get("position")
+        if not (isinstance(r_pos, list) and len(r_pos) == 2 and isinstance(r_pos[0], int) and isinstance(r_pos[1], int)):
+            raise ErreurFichier(f"position du resident {r_id} invalide : {r_pos}")
+        if not (0 <= r_pos[0] < h) or not (0 <= r_pos[1] < l):
+            raise ErreurFichier(f"resident {r_id} a la posiiton {r_pos} hors de la grille")
+        if grille[r_pos[0]][r_pos[1]] != sym_res:
+            raise ErreurFichier(
+                f"Position du resident {r_id} {r_pos} ne correspond pas "
+                f"a la grille (symbole attendu '{sym_res}', trouve '{grille[r_pos[0]][r_pos[1]]}')"
+            )
+
+
+def _verifier_armoire(donnees: dict) -> None:
+    _verifier_champs(donnees, {
+        "nom": str,
+        "emotions": list,
+        "intensites": list,
+        "casier_depart": list,
+        "casiers": list
+    })
+
+    emotions = donnees["emotions"]
+    intensites = donnees["intensites"]
+    hauteur_armoire = len(intensites)
+    largeur_armoire = len(emotions)
+
+    cd = donnees["casier_depart"]
+    if not isinstance(cd, list) or len(cd) != 2 or not isinstance(cd[0], int) or not isinstance(cd[1], int):
+        raise ErreurFichier("casier_depart doit etre une liste de deux entiers")
+    if not (0 <= cd[0] < hauteur_armoire) or not (0 <= cd[1] < largeur_armoire):
+        raise ErreurFichier(
+            f"casier_depart hors des dimensions de l'armoire : {cd} (dimensions {hauteur_armoire}x{largeur_armoire})"
+        )
+
+    positions_vues = set()
+
+    for casier in donnees["casiers"]:
+        ligne = casier.get("ligne")
+        colonne = casier.get("colonne")
+        emotion = casier.get("emotion")
+        intensite = casier.get("intensite")
+
+        if ligne is None or colonne is None or emotion is None or intensite is None:
+            raise ErreurFichier(f"Casier incomplet : {casier}")
+
+        pos = [ligne, colonne]
+        _verifier_limites(pos, hauteur_armoire, largeur_armoire, "casier")
+
+        if (ligne, colonne) in positions_vues:
+            raise ErreurFichier(f"Casier duplique a la position {pos}")
+        positions_vues.add((ligne, colonne))
+
+        if emotions[colonne] != emotion:
+            raise ErreurFichier(
+                f"Emotion du casier {pos} ({emotion}) ne correspond pas "
+                f"a la colonne {colonne} de la liste d'emotions ({emotions[colonne]})"
+            )
+        if intensites[ligne] != intensite:
+            raise ErreurFichier(
+                f"Intensite du casier {pos} ({intensite}) ne correspond pas "
+                f"a la ligne {ligne} de la liste d'intensites ({intensites[ligne]})"
+            )
+
+
+def _verifier_dictionnaire(donnees: dict) -> None:
+    _verifier_champs(donnees, {
+        "nom": str,
+        "emotions": list,
+        "intensites": list,
+        "entrees": list
+    })
+
+    emotions_connues = set(donnees["emotions"])
+    intensites_connues = set(donnees["intensites"])
+    mots_vus = set()
+
+    for entree in donnees["entrees"]:
+        emotion = entree.get("emotion")
+        intensite = entree.get("intensite")
+        formes = entree.get("formes", [])
+
+        if emotion not in emotions_connues:
+            raise ErreurFichier(f"Emotion inconnue dans dictionnaire : {emotion!r}")
+        if intensite not in intensites_connues:
+            raise ErreurFichier(f"Intensite inconnue dans dictionnaire : {intensite!r}")
+
+        for mot in formes:
+            if mot in mots_vus:
+                raise ErreurFichier(f"Mot duplique dans dictionnaire : {mot!r}")
+            mots_vus.add(mot)
+
+
+def _verifier_scenario(donnees: dict, carte: dict | None = None) -> None:
+    _verifier_champs(donnees, {
+        "nom": str,
+        "carte": str,
+        "armoire": str,
+        "demandes": list
+    })
+
+    if carte is not None:
+        if donnees.get("carte") != carte.get("nom"):
+            raise ErreurFichier(
+                f"scenario incompatible avec la carte : attendu '{carte.get('nom')}', trouve '{donnees.get('carte')}'"
+            )
+        res_connus = {r["id"] for r in carte.get("residents", [])}
+        for demande in donnees.get("demandes", []):
+            if demande.get("resident") not in res_connus:
+                raise ErreurFichier(
+                    f"demande {demande.get('numero')} adressee a un resident absent de la carte : '{demande.get('resident')}'"
+                )
+
+    numeros_vus = set()
+    for demande in donnees["demandes"]:
+        if not isinstance(demande, dict):
+            raise ErreurFichier(f"Demande invalide : {demande} (chaque demande doit être un objet JSON (dictionnaire))")
+
+        champs_demande = { "numero": int, "resident": str, "message": str }
+        for cle, type_attendu in champs_demande.items():
+            if cle not in demande:
+                raise ErreurFichier(f"Champ obligatoire manquant dans une demande : '{cle}'")
+            if not isinstance(demande[cle], type_attendu):
+                raise ErreurFichier(
+                    f"Champ '{cle}' de type {type(demande[cle]).__name__}, "
+                    f"attendu {type_attendu.__name__}"
+                )
+
+        numero = demande["numero"]
+        if numero in numeros_vus:
+            raise ErreurFichier(f"Numero de demande duplique : {numero}")
+        numeros_vus.add(numero)
+
+
+# ---------------------------------------------------------------------------
 # Lecture
 # ---------------------------------------------------------------------------
 
 def _lire_json(chemin: str | Path, format_attendu: str) -> dict[str, Any]:
-    """Lit un fichier JSON UTF-8 et verifie son en-tete.
-
-    Ce qui EST verifie ici :
-      - le fichier existe et se lit en UTF-8 ;
-      - son contenu est du JSON valide ;
-      - la racine est un objet ;
-      - les champs "format" et "version" sont presents et corrects.
-
-    Ce qui n'est PAS verifie (a vous de le faire, enonce section 5.6) :
-      - la presence et le type de chacun des autres champs ;
-      - la coherence des donnees (grille rectangulaire, positions dans les
-        bornes, resident pose sur un mur, casier hors de l'armoire,
-        emotion inconnue, resident cite par un scenario mais absent de la
-        carte...).
-    """
+    """Lit un fichier JSON UTF-8 et verifie son en-tete."""
     chemin = Path(chemin)
     try:
         texte = chemin.read_text(encoding="utf-8")
@@ -104,6 +359,15 @@ def _lire_json(chemin: str | Path, format_attendu: str) -> dict[str, Any]:
             f"{chemin} : version {VERSION_ATTENDUE} attendue, trouve {version!r}"
         )
 
+    if format_attendu == "robot-reconfort/carte":
+        _verifier_carte(donnees)
+    elif format_attendu == "robot-reconfort/dictionnaire":
+        _verifier_dictionnaire(donnees)
+    elif format_attendu == "robot-reconfort/armoire":
+        _verifier_armoire(donnees)
+    elif format_attendu == "robot-reconfort/scenario":
+        _verifier_scenario(donnees)
+
     return donnees
 
 
@@ -122,40 +386,12 @@ def charger_armoire(chemin: str | Path) -> dict[str, Any]:
     return _lire_json(chemin, "robot-reconfort/armoire")
 
 
-def charger_scenario(chemin: str | Path) -> dict[str, Any]:
+def charger_scenario(chemin: str | Path, carte: dict | None = None) -> dict[str, Any]:
     """Charge un fichier scenario. Voir l'enonce, section 5.4."""
-    return _lire_json(chemin, "robot-reconfort/scenario")
-
-
-# ---------------------------------------------------------------------------
-# Normalisation des messages
-# ---------------------------------------------------------------------------
-
-def normaliser(texte: str) -> list[str]:
-    """Decoupe un message en mots comparables au dictionnaire.
-
-    Minuscules, accents retires, decoupage sur tout ce qui n'est pas une
-    lettre. C'est exactement la regle de l'enonce, section 6.1 ;
-    reimplementez-la vous-meme si vous travaillez dans un autre langage.
-
-        >>> normaliser("Je suis TERRIFIEE, vraiment !")
-        ['je', 'suis', 'terrifiee', 'vraiment']
-    """
-    decompose = unicodedata.normalize("NFD", texte.lower())
-    sans_accents = "".join(
-        c for c in decompose if unicodedata.category(c) != "Mn"
-    )
-    mots: list[str] = []
-    courant: list[str] = []
-    for caractere in sans_accents:
-        if caractere.isalpha():
-            courant.append(caractere)
-        elif courant:
-            mots.append("".join(courant))
-            courant = []
-    if courant:
-        mots.append("".join(courant))
-    return mots
+    scenario = _lire_json(chemin, "robot-reconfort/scenario")
+    if carte is not None:
+        _verifier_scenario(scenario, carte)
+    return scenario
 
 
 # ---------------------------------------------------------------------------
