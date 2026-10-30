@@ -4,10 +4,11 @@ Entrypoint du projet
 python3 agent.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import reconfort_io as rio
+from robot import Robot
 
 EQUIPE = ["FAIZE Adnan", "SELMI Eya"]
 
@@ -16,8 +17,21 @@ class Agent:
     def __init__(self, carte, armoire, dictionnaire, nom_carte, nom_scenario):
         self.dictionnaire = dictionnaire
         self.armoire = armoire
+        self.robot = Robot(carte, armoire)
         self.trace = rio.Trace(nom_carte=nom_carte, nom_scenario=nom_scenario, equipe=EQUIPE)
-    
+
+    def resoudre_scenario(self, monde, demandes, visuel = False):
+        for demande in demandes:
+            num = demande["numero"]
+            res_id = demande["resident"]
+            message = demande["message"]
+
+            if visuel:
+                print("="*60)
+                print(f"Demande {num} pour {res_id} : {message!r}")
+                print("="*60)
+
+            
 
 
 def main(argv):
@@ -41,7 +55,7 @@ def main(argv):
     except rio.ErreurFichier as err:
         print(f"Erreur de donnees : {err}", file=sys.stderr)
         return 1
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001
         print(f"Erreur inattendue : {err}", file=sys.stderr)
         return 1
 

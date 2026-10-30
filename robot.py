@@ -6,7 +6,7 @@ from planification import DIRECTIONS, direction_entre, plus_court_chemin
 
 class Robot:
 
-    def __init__(self, carte):
+    def __init__(self, carte, armoire):
         self.hauteur = carte["dimensions"]["hauteur"]
         self.largeur = carte["dimensions"]["largeur"]
         self.position = tuple(carte["depart_robot"])
@@ -24,6 +24,14 @@ class Robot:
         self.carte_mentale[self.position_dictionnaire] = "dictionnaire"
         for case in self.position_residents.values():
             self.carte_mentale[case] = "resident"
+
+        if armoire is not None:
+            self.position_selecteur = list(armoire.get("casier_depart", [1,0]))
+        else:
+            self.position_selecteur = [1,0]
+        self.memoire_armoire = {}
+
+        self.objet_main = None
 
     #--------------- Memoire
 

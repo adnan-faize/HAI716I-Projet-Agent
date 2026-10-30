@@ -1,5 +1,5 @@
 """
-Décision de l'agent.
+Décisions de l'agent.
 
 Lecture et analyse du dictionnaire
 Fouille de l'armoire
