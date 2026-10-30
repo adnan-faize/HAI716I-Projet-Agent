@@ -24,7 +24,7 @@ INDICE_EMOTION = { nom : i for i, nom in enumerate(EMOTIONS) }
 RANG_INTENSITE = { nom : i for i, nom in enumerate(INTENSITES) }
 
 
-class RouePlutchick:
+class RouePlutchik:
     def __init__(self, emotions: list[str] | None = None, intensites: list[str] | None = None):
         self.emotions = emotions or list(EMOTIONS)
         self.intensites = intensites or list(INTENSITES)
