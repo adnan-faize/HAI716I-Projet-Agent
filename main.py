@@ -1,30 +1,43 @@
 """
 Entrypoint du projet
 
-python3 agent.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>
+python3 main.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import reconfort_io as rio
-
-EQUIPE = ["FAIZE Adnan", "SELMI Eya"]
+from robot import Robot
 
 
 class Agent:
     def __init__(self, carte, armoire, dictionnaire, nom_carte, nom_scenario):
         self.dictionnaire = dictionnaire
         self.armoire = armoire
-        self.trace = rio.Trace(nom_carte=nom_carte, nom_scenario=nom_scenario, equipe=EQUIPE)
-    
+        self.robot = Robot(carte, armoire)
+
+    def resoudre_scenario(self, monde, demandes, visuel = False):
+        for demande in demandes:
+            num = demande["numero"]
+            res_id = demande["resident"]
+            message = demande["message"]
+
+            if visuel:
+                print("="*60)
+                print(f"Demande {num} pour {res_id} : {message!r}")
+                print("="*60)
+
+
+def resoudre_scenario():
+    pass
 
 
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
 
     if len(args) != 4:
-        print("Usage : python agent.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>", file=sys.stderr)
+        print("Usage : python main.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>", file=sys.stderr)
         return 2
 
     chemin_carte, chemin_scenario, dossier_donnees, chemin_trace = args
@@ -41,7 +54,7 @@ def main(argv):
     except rio.ErreurFichier as err:
         print(f"Erreur de donnees : {err}", file=sys.stderr)
         return 1
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001
         print(f"Erreur inattendue : {err}", file=sys.stderr)
         return 1
 
@@ -59,9 +72,13 @@ def main(argv):
     print(f"dictionnaire   : {carte['dictionnaire']['position']}")
     print(f"casier depart  : {armoire['casier_depart']}")
 
-    agent = Agent(carte=carte, armoire=armoire, dictionnaire=dictionnaire, nom_carte=carte["nom"], nom_scenario=scenario["nom"])
-    agent.trace.ecrire(chemin_trace)
+    trace = rio.Trace(nom_carte=carte["nom"], nom_scenario=scenario["nom"], equipe=["FAIZE Adnan", "SELMI Eya"])
+
+
+    resoudre_scenario()
     
+    trace.ecrire(chemin_trace)
+
     return 0
 
 
