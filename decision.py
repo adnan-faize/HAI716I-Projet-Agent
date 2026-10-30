@@ -10,12 +10,12 @@ from __future__ import annotations
 from typing import Any
 
 from reconfort_io import normaliser
-from roue import RouePlutchick
+from roue import RouePlutchik
 
 
 class Decision:
-    def __init__(self, roue: RouePlutchick | None = None):
-        self.roue = roue or RouePlutchick()
+    def __init__(self, roue: RouePlutchik | None = None):
+        self.roue = roue or RouePlutchik()
 
     @staticmethod
     def analyser_message(dictionnaire: dict[str, Any], message: str) -> tuple[str, str] | None:
