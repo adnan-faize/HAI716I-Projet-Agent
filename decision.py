@@ -39,3 +39,9 @@ class Decision:
             if mot in formes_connues:
                 return formes_connues[mot]
         return None
+
+    def preparer_candidats_armoire(self, emotion: str, intensite: str) -> list[dict[str, Any]]:
+        return self.roue.candidats_repli(emotion, intensite)
+
+    def chemin_selecteur(self, act_pos, target_pos) -> list[str]:
+        return self.roue.deplacement_selecteur(act_pos, target_pos)
