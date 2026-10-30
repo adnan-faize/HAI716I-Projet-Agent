@@ -89,6 +89,20 @@ class RouePlutchick:
         return candidats
 
     def deplacement_selecteur(self, depart, arrivee) -> list[str]:
-        """
-        """
-        return []
+        l1, c1 = depart[0], depart[1]
+        l2, c2 = arrivee[0], arrivee[1]
+
+        mouvements = []
+
+        if l2 > l1:
+            mouvements.extend(["S"] * (l2 - l1))
+        elif l2 < l1:
+            mouvements.extend(["N"] * (l2 - l1))
+
+        a = (c2 - c1) % self.nb_emotions
+        if a <= self.nb_emotions - a:
+            mouvements.extend(["E"] * a)
+        else:
+            mouvements.extend(["O"] * (self.nb_emotions - a))
+
+        return mouvements

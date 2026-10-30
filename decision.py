@@ -14,8 +14,6 @@ from roue import RouePlutchick
 
 
 class Decision:
-
-
     def __init__(self, roue: RouePlutchick | None = None):
         self.roue = roue or RouePlutchick()
 
