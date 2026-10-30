@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Demonstration de la base fournie -- projet "Robot de reconfort".
 
