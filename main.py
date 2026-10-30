@@ -1,7 +1,7 @@
 """
 Entrypoint du projet
 
-python3 agent.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>
+python3 main.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>
 """
 
 import sys
@@ -10,15 +10,12 @@ from pathlib import Path
 import reconfort_io as rio
 from robot import Robot
 
-EQUIPE = ["FAIZE Adnan", "SELMI Eya"]
-
 
 class Agent:
     def __init__(self, carte, armoire, dictionnaire, nom_carte, nom_scenario):
         self.dictionnaire = dictionnaire
         self.armoire = armoire
         self.robot = Robot(carte, armoire)
-        self.trace = rio.Trace(nom_carte=nom_carte, nom_scenario=nom_scenario, equipe=EQUIPE)
 
     def resoudre_scenario(self, monde, demandes, visuel = False):
         for demande in demandes:
@@ -31,14 +28,16 @@ class Agent:
                 print(f"Demande {num} pour {res_id} : {message!r}")
                 print("="*60)
 
-            
+
+def resoudre_scenario():
+    pass
 
 
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
 
     if len(args) != 4:
-        print("Usage : python agent.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>", file=sys.stderr)
+        print("Usage : python main.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>", file=sys.stderr)
         return 2
 
     chemin_carte, chemin_scenario, dossier_donnees, chemin_trace = args
@@ -73,9 +72,13 @@ def main(argv):
     print(f"dictionnaire   : {carte['dictionnaire']['position']}")
     print(f"casier depart  : {armoire['casier_depart']}")
 
-    agent = Agent(carte=carte, armoire=armoire, dictionnaire=dictionnaire, nom_carte=carte["nom"], nom_scenario=scenario["nom"])
-    agent.trace.ecrire(chemin_trace)
+    trace = rio.Trace(nom_carte=carte["nom"], nom_scenario=scenario["nom"], equipe=["FAIZE Adnan", "SELMI Eya"])
+
+
+    resoudre_scenario()
     
+    trace.ecrire(chemin_trace)
+
     return 0
 
 
