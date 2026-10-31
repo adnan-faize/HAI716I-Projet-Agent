@@ -91,9 +91,9 @@ def main(argv):
     print()
 
     try:
-        monde = Monde(carte, armoire)
-        robot = Robot(carte, armoire)
         trace = rio.Trace(nom_carte=carte["nom"], nom_scenario=scenario["nom"], equipe=["FAIZE Adnan", "SELMI Eya"])
+        monde = Monde(carte, armoire)
+        robot = Robot(carte, armoire, dictionnaire, trace)
 
         actualiser_affichage(monde, robot, ["--- DEBUT DE LA SIMULATION ---"], True)
 

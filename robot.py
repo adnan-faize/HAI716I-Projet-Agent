@@ -1,4 +1,4 @@
-""" 
+"""
 Ce que le robot sait et comment il décide où aller.
 Regroupe la mémoire, la perception, la planification et la prise de décision.
 """
@@ -25,7 +25,7 @@ class Robot:
         self.trace = trace
         self.roue = RouePlutchik()
 
-        # La carte mentale 
+        # La carte mentale
         self.carte_mentale = {}
         self.carte_mentale[self.position] = "libre"      # il est dessus
         self.carte_mentale[self.position_armoire] = "armoire"
@@ -37,7 +37,7 @@ class Robot:
             self.position_selecteur = list(armoire.get("casier_depart", [1, 0]))
         else:
             self.position_selecteur = [1, 0]
-            
+
         self.memoire_armoire = {}
         self.objet_main = None
 
@@ -66,8 +66,8 @@ class Robot:
     def preparer_candidats_armoire(self, emotion: str, intensite: str) -> list[dict[str, Any]]:
         return self.roue.candidats_repli(emotion, intensite)
 
-    def chemin_selecteur(self, act_pos, target_pos) -> list[str]:
-        return self.roue.deplacement_selecteur(act_pos, target_pos)
+    def chemin_selecteur(self, target_pos) -> list[str]:
+        return self.roue.deplacement_selecteur(self.position_selecteur, target_pos)
 
     # ---------- Memoire
 
@@ -127,7 +127,7 @@ class Robot:
 
             if self.position in self.cases_autour(cible):
                 return True
-            
+
             direction = self.prochaine_direction(cible)  # 3. decider (BFS)
 
             if direction == "ARRIVE":
@@ -136,7 +136,7 @@ class Robot:
                 return False
 
             # 4. agir
-            casier_vue = getattr(monde, "percevoir_casier", lambda: None)()
+            casier_vue = monde.contenu_casier()
             self.trace.ajouter_pas(demande=demande_num, position=self.position, casier=list(self.position_selecteur), action="AVANCER", argument=direction, perception=perception, contenu_casier=casier_vue)
             monde.avancer(direction)                     # 4. agir
             dl, dc = DIRECTIONS[direction]               #    et mettre a jour
@@ -168,10 +168,10 @@ class Robot:
         # ----- Phase 2 : Consulter le dictionnaire
         perception = monde.percevoir()
         self.memoriser(perception)
-        casier_vue = getattr(monde, "percevoir_casier", lambda: None)()
+        casier_vue = monde.contenu_casier()
         self.trace.ajouter_pas(demande=num, position=self.position, casier=list(self.position_selecteur), action="CONSULTER", argument=None, perception=perception, contenu_casier=casier_vue, commentaire="Consultation du dictionnaire")
         monde.consulter()
-        
+
         analyse = self.analyser_message(message)
         if analyse is None:
             self.trace.ajouter_livraison(demande=num, resident=res_id, emotion=None, intensite=None, casier_choisi=None, repli="aucun", objet=None, succes=False, motif_echec="emotion indeterminee")
@@ -184,11 +184,85 @@ class Robot:
             actualiser_affichage([f"\t-> Message compris : émotion={emotion}, intensité={intensite}"])
 
         # ----- Phase 3 : Rejoindre l'armoire
+        atteint_armoire = self.aller_vers(monde, self.position_armoire, num, actualiser_affichage)
+        if not atteint_armoire:
+            self.trace.ajouter_livraison(demande=num, resident=res_id, emotion=emotion, intensite=intensite, casier_choisi=None, repli="aucun", objet=None, succes=False, motif_echec="armoire inaccessible")
+            return
+
+        casier_init = monde.contenu_casier()
+        self.memoire_armoire[tuple(self.position_selecteur)] = casier_init
 
         # ----- Phase 4 : Fouiller l'armoire (chercher et prendre)
-        
+        candidats = self.preparer_candidats_armoire(emotion, intensite)
+        candidat_choisi = None
+
+        for c in candidats:
+            pos_c = tuple(c["casier"])
+
+            if pos_c in self.memoire_armoire:
+                if self.memoire_armoire[pos_c] is not None:
+                    candidat_choisi = c
+                    break
+                else:
+                    continue
+
+            mouvements = self.chemin_selecteur(pos_c)
+            for m in mouvements:
+                p_actuelle = monde.percevoir()
+                c_actuel = monde.contenu_casier()
+                self.trace.ajouter_pas(demande=num, position=self.position, casier=list(self.position_selecteur), action="CHERCHER", argument=m, perception=p_actuelle, contenu_casier=c_actuel)
+                monde.chercher(m)
+
+                # maj pos selecteur
+                if   m == "N": self.position_selecteur[0] -= 1
+                elif m == "S": self.position_selecteur[0] += 1
+                elif m == "E": self.position_selecteur[1] = (self.position_selecteur[1] + 1) % 8
+                elif m == "O": self.position_selecteur[1] = (self.position_selecteur[1] - 1) % 8
+
+                c_nouveau = monde.contenu_casier()
+                self.memoire_armoire[tuple(self.position_selecteur)] = c_nouveau
+
+                if actualiser_affichage:
+                    actualiser_affichage(None)
+
+            if self.memoire_armoire.get(pos_c) is not None:
+                candidat_choisi = c
+                break
+
+        if candidat_choisi is None:
+            self.trace.ajouter_livraison(demande=num, resident=res_id, emotiono=emotion, intensite=intensite, casier_choisi=None, repli="aucun", objet=None, succes=False, motif_echec="armoire vide")
+            if actualiser_affichage:
+                actualiser_affichage(["\t-> Échec : Armoire vide"])
+            return
+
+        # rejoidre le casier choisi s'il a été trouvé plus tôt
+        pos_cible = tuple(candidat_choisi["casier"])
+        if tuple(self.position_selecteur) != pos_cible:
+            mouvements = self.chemin_selecteur(pos_cible)
+            for m in mouvements:
+                p_actuelle = monde.percevoir()
+                c_actuel = monde.contenu_casier()
+                self.trace.ajouter_pas(demande=num, position=self.position, casier=list(self.position_selecteur), action="CEHRCER", argument=m, perception=p_actuelle, contenu_casier=c_actuel)
+                monde.chercher(m)
+                if   m == "N": self.position_selecteur[0] -= 1
+                elif m == "S": self.position_selecteur[0] += 1
+                elif m == "E": self.position_selecteur[1] = (self.position_selecteur[1] + 1) % 8
+                elif m == "O": self.position_selecteur[1] = (self.position_selecteur[1] - 1) % 8
+                c_nouveau = monde.contenu_casier()
+                self.memoire_armoire[tuple(self.position_selecteur)] = c_nouveau
+                if actualiser_affichage:
+                    actualiser_affichage(None)
+
+        objet_pris = self.memoire_armoire.get(pos_cible)
+        p_actuelle = monde.percevoir()
+        self.trace.ajouter_pas(demande=num, position=self.position, casier=list(self.position_selecteur), action="PRENDRE", argument=objet_pris, perception=p_actuelle, contenu_casier=objet_pris, commentaire=f"Prise de l'objet {objet_pris} (repli={candidat_choisi['repli']})")
+        monde.prendre(objet_pris)
+        self.objet_main = objet_pris
+        self.memoire_armoire[pos_cible] = None # Vider le casier
+
+        if actualiser_affichage:
+            actualiser_affichage([f"\t-> Objet pris : {objet_pris} (repli={candidat_choisi['repli']})"])
+
         # ----- Phase 5 : Rejoindre le résident
-        
+
         # ----- Phase 6 : Donner l'objet au résident
-        
-        
