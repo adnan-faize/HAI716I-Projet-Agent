@@ -242,7 +242,7 @@ class Robot:
             for m in mouvements:
                 p_actuelle = monde.percevoir()
                 c_actuel = monde.contenu_casier()
-                self.trace.ajouter_pas(demande=num, position=self.position, casier=list(self.position_selecteur), action="CEHRCER", argument=m, perception=p_actuelle, contenu_casier=c_actuel)
+                self.trace.ajouter_pas(demande=num, position=self.position, casier=list(self.position_selecteur), action="CHERCHER", argument=m, perception=p_actuelle, contenu_casier=c_actuel)
                 monde.chercher(m)
                 if   m == "N": self.position_selecteur[0] -= 1
                 elif m == "S": self.position_selecteur[0] += 1
@@ -264,5 +264,19 @@ class Robot:
             actualiser_affichage([f"\t-> Objet pris : {objet_pris} (repli={candidat_choisi['repli']})"])
 
         # ----- Phase 5 : Rejoindre le résident
+        atteint_resident = self.aller_vers(monde, pos_resident, num, actualiser_affichage)
+        if not atteint_resident:
+            self.trace.ajouter_livraison(demande=num, resident=res_id, emotion=emotion, intensite=intensite, casier_choisi=list(pos_cible), preli=candidat_choisi["repli"], objet=objet_pris, succes=False, motif_echec="resident inaccessible")
+            return
 
         # ----- Phase 6 : Donner l'objet au résident
+        p_actuelle = monde.percevoir()
+        c_actuel = monde.contenu_casier()
+        self.trace.ajouter_pas(demande=num, position=self.position, casier=list(self.position_selecteur), action="DONNER", argument=objet_pris, perception=p_actuelle, contenu_casier=c_actuel, commentaire=f"Don de l'objet a {res_id}")
+        monde.donner(res_id, objet_pris)
+        self.objet_main = None
+
+        if actualiser_affichage:
+            actualiser_affichage([f"\t-> Objet {objet_pris} livré avec succès à {res_id}"])
+
+        self.trace.ajouter_livraison(demande=num, resident=res_id, emotion=emotion, intensite=intensite, casier_choisi=list(pos_cible), repli=candidat_choisi["repli"], objet=objet_pris, succes=True, motif_echec=None)

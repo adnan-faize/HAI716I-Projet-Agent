@@ -24,7 +24,7 @@ def afficher_grille(monde: Monde, robot: Robot):
                 ligne.append("R")
             else:
                 case_reelle = monde._grille[l][c]
-                ligne.append(case_reelle)
+                ligne.append(case_reelle if case_reelle != "R" else ".")
         print(" ".join(ligne))
     print(f"Position robot : {robot.position} | Objet : {robot.objet_main}")
 
@@ -77,6 +77,7 @@ def main(argv):
     sys.stdout.write("\033[?25l")
     sys.stdout.flush()
 
+    print()
     print(f"carte        : {carte['nom']} {carte['dimensions']['hauteur']}x{carte['dimensions']['largeur']}, {len(carte['residents'])} residents")
     print(f"scenario     : {scenario['nom']}, {len(scenario['demandes'])} demandes")
     print(f"dictionnaire : {len(dictionnaire['entrees'])} entrees")
@@ -107,6 +108,7 @@ def main(argv):
         print()
         print(f"[FIN] trace ecrite : {chemin_trace}")
     except ActionIllegale as err:
+        print()
         print(f"Erreur de simulation (action illegale) : {err}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
