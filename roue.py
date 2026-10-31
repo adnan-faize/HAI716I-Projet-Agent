@@ -97,7 +97,7 @@ class RouePlutchik:
         if l2 > l1:
             mouvements.extend(["S"] * (l2 - l1))
         elif l2 < l1:
-            mouvements.extend(["N"] * (l2 - l1))
+            mouvements.extend(["N"] * (l1 - l2))
 
         a = (c2 - c1) % self.nb_emotions
         if a <= self.nb_emotions - a:
