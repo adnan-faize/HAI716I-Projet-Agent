@@ -4,7 +4,9 @@ Entrypoint du projet
 python3 main.py <chemin_carte> <chemin_scenario> <dossier_donnees> <chemin_trace>
 """
 
+import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +15,7 @@ from monde import ActionIllegale, Monde
 from robot import Robot
 
 
-def afficher_grille(monde: Monde, robot: Robot, demandes_actions: list[tuple[str, list[str]]] | None = None, is_finished: bool = False):
-    print("\033[u\033[J", end="") # restore cursor (\033[u) and clear everything below it (\033[J)
+def afficher_grille(monde: Monde, robot: Robot):
     l_r, c_r = robot.position
     for l in range(robot.hauteur):
         ligne = []
@@ -26,25 +27,31 @@ def afficher_grille(monde: Monde, robot: Robot, demandes_actions: list[tuple[str
                 ligne.append(case_reelle)
         print(" ".join(ligne))
     print(f"Position robot : {robot.position} | Objet : {robot.objet_main}")
-    if demandes_actions is None:
-        return
-    print()
-    for d_index, demande_actions in enumerate(demandes_actions):
-        print(f"[{"DONE" if d_index < len(demandes_actions) and not is_finished else "    "}] {demande_actions[0]}") # print de la demande
-        for action in demande_actions[1]:
-            print(f"       -> {action}") # print des actions effectuées par le robot        
 
 
-def traiter_demande(monde: Monde, robot: Robot, trace: rio.Trace, demande: dict[str, Any], prev_demandes_actions: list[tuple[str, list[str]]]):
+def actualiser_affichage(monde: Monde, robot: Robot, nouveaux_messages: list[str] | None = None, premiere_fois: bool = False):
+    lignes_grille = robot.hauteur + 1
+
+    if not premiere_fois:
+        print(f"\033[{lignes_grille}F\033[J", end="")
+
+    if nouveaux_messages:
+        for msg in nouveaux_messages:
+            print(msg)
+
+    afficher_grille(monde, robot)
+    time.sleep(0.5)
+
+
+def traiter_demande(monde: Monde, robot: Robot, trace: rio.Trace, demande: dict[str, Any]):
     num = demande["numero"]
     res_id = demande["resident"]
     message = demande["message"]
     pos_res = robot.position_residents[res_id]
 
-    prev_demandes_actions.append((f"Demande {num} pour {res_id} : {message!r}", []))
+    actualiser_affichage(monde, robot, [f"Demande {num} pour {res_id} : {message!r}"])
 
-    afficher_grille(monde, robot, prev_demandes_actions)
-    
+    # TODO : voir avec le robot + faire fonction pour journaliser
 
 
 def main(argv):
@@ -66,6 +73,17 @@ def main(argv):
         print(f"Erreur inattendue : {err}", file=sys.stderr)
         return 1
 
+    # compatibilite windows pour codes ansi
+    if os.name == 'nt':
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        # -11 correspond à STD_OUTPUT_HANDLE
+        handle = kernel32.GetStdHandle(-11)
+        mode = ctypes.c_ulong()
+        kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+        # 0x0004 correspond à ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+
     # cacher le curseur
     sys.stdout.write("\033[?25l")
     sys.stdout.flush()
@@ -80,23 +98,19 @@ def main(argv):
     print(f"dictionnaire   : {carte['dictionnaire']['position']}")
     print(f"casier depart  : {armoire['casier_depart']}")
     print()
+    print("-"*60)
+    print()
 
     try:
-        print("\033[s", end="") # sauvegarder pos curseur
-        
         monde = Monde(carte, armoire)
         robot = Robot(carte, armoire)
         trace = rio.Trace(nom_carte=carte["nom"], nom_scenario=scenario["nom"], equipe=["FAIZE Adnan", "SELMI Eya"])
-        prev_demandes_actions = [] # sert uniquement pour le visuel
-                                   # au fur et a mesure que le robot complète des demandes, elles sont ajoutées là dedans
 
-        afficher_grille(monde, robot)
+        actualiser_affichage(monde, robot, ["--- DEBUT DE LA SIMULATION ---"], True)
     
         for demande in scenario["demandes"]:
-            traiter_demande(monde, robot, trace, demande, prev_demandes_actions)
+            traiter_demande(monde, robot, trace, demande)
 
-        afficher_grille(monde, robot, prev_demandes_actions, True)
-    
         trace.ecrire(chemin_trace)
         print(f"trace ecrite : {chemin_trace}")
     except ActionIllegale as err:
