@@ -81,4 +81,4 @@ L'architecture du projet applique une séparation stricte entre **Perception**, 
 
 ## Vidéo de démonstration
 
-https://github.com/adnan-faize/HAI716I-Projet-Agent/blob/main/demo.mp4
+<video src="https://github.com/adnan-faize/HAI716I-Projet-Agent/raw/main/demo.mp4" controls="controls" width="100%"></video>
