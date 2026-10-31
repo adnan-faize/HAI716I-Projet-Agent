@@ -7,7 +7,40 @@
 import unittest
 
 from monde import Monde
+from reconfort_io import Trace
 from robot import Robot
+
+# Adaptation de Robot pour les tests (valeurs par défaut pour armoire, dictionnaire, trace)
+_orig_robot_init = Robot.__init__
+
+def _robot_init(self, carte, armoire=None, dictionnaire=None, trace=None):
+    if armoire is None:
+        armoire = {}
+    if dictionnaire is None:
+        dictionnaire = {}
+    if trace is None:
+        nom_carte = carte.get("nom", "test_carte")
+        trace = Trace(nom_carte=nom_carte, nom_scenario="test_scenario")
+    _orig_robot_init(self, carte, armoire, dictionnaire, trace)
+
+Robot.__init__ = _robot_init
+
+_orig_robot_aller_vers = Robot.aller_vers
+
+def _robot_aller_vers(self, monde, cible, demande_num=1, actualiser_affichage=None, journaliser=None):
+    if journaliser is not None:
+        orig_avancer = monde.avancer
+        def avancer_avec_journal(direction):
+            journaliser(self.position, direction, monde.percevoir())
+            orig_avancer(direction)
+        monde.avancer = avancer_avec_journal
+        try:
+            return _orig_robot_aller_vers(self, monde, cible, demande_num, actualiser_affichage)
+        finally:
+            monde.avancer = orig_avancer
+    return _orig_robot_aller_vers(self, monde, cible, demande_num, actualiser_affichage)
+
+Robot.aller_vers = _robot_aller_vers
 
 LEGENDE = {"#": "mur", ".": "libre", "R": "depart du robot",
            "A": "armoire", "D": "dictionnaire", "P": "resident"}

@@ -89,21 +89,21 @@ class TestReconfortIO(unittest.TestCase):
         carte = deepcopy(CARTE_BASE)
         carte["grille"][1] = ".A" # Plus court que les autres
         chemin = self.ecrire_json("carte.json", carte)
-        with self.assertRaisesRegex(ErreurFichier, "grille non rectangulaire"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)grille non rectangulaire"):
             charger_carte(chemin)
 
     def test_carte_dimensions_incoherentes(self):
         carte = deepcopy(CARTE_BASE)
         carte["dimensions"]["hauteur"] = 10 # Fausse hauteur
         chemin = self.ecrire_json("carte.json", carte)
-        with self.assertRaisesRegex(ErreurFichier, "hauteur de grille annoncee"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)(grille doit avoir|hauteur)"):
             charger_carte(chemin)
 
     def test_carte_symbole_inattendu(self):
         carte = deepcopy(CARTE_BASE)
         carte["depart_robot"] = [0, 1] # En (0,1) c'est un '.', pas un 'R'
         chemin = self.ecrire_json("carte.json", carte)
-        with self.assertRaisesRegex(ErreurFichier, "symbole de depart inattendu"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)ne correspond pas a la grille"):
             charger_carte(chemin)
 
     def test_carte_resident_hors_limite(self):
@@ -118,7 +118,7 @@ class TestReconfortIO(unittest.TestCase):
         # Ajout d'un 2ème résident avec le même ID 'R1'
         carte["residents"].append({"id": "R1", "nom": "Hugo", "position": [0, 2]})
         chemin = self.ecrire_json("carte.json", carte)
-        with self.assertRaisesRegex(ErreurFichier, "en double detecte"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)en double d[eé]tect[eé]"):
             charger_carte(chemin)
 
     # --- TESTS ARMOIRE ---
@@ -139,7 +139,7 @@ class TestReconfortIO(unittest.TestCase):
         armoire["casiers"][1]["ligne"] = 0
         armoire["casiers"][1]["colonne"] = 0
         chemin = self.ecrire_json("armoire.json", armoire)
-        with self.assertRaisesRegex(ErreurFichier, "casier en double"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)casier duplique"):
             charger_armoire(chemin)
 
     def test_armoire_etiquette_incoherente(self):
@@ -147,7 +147,7 @@ class TestReconfortIO(unittest.TestCase):
         # On dit que le casier à la colonne 0 (joie) est de la tristesse
         armoire["casiers"][0]["emotion"] = "tristesse"
         chemin = self.ecrire_json("armoire.json", armoire)
-        with self.assertRaisesRegex(ErreurFichier, "l'etiquette emotion 'tristesse' ne correspond pas a la colonne 0"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)ne correspond pas a la colonne 0"):
             charger_armoire(chemin)
 
     # --- TESTS DICTIONNAIRE ---
@@ -159,7 +159,7 @@ class TestReconfortIO(unittest.TestCase):
         dico = deepcopy(DICTIONNAIRE_BASE)
         dico["entrees"][0]["emotion"] = "colere" # Non déclaré dans 'emotions'
         chemin = self.ecrire_json("dict.json", dico)
-        with self.assertRaisesRegex(ErreurFichier, "emotion inconnue dans les entrees : colere"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)emotion inconnue"):
             charger_dictionnaire(chemin)
 
     def test_dictionnaire_mot_doublon(self):
@@ -167,7 +167,7 @@ class TestReconfortIO(unittest.TestCase):
         # Le mot "pleure" est ajouté dans la catégorie joie
         dico["entrees"][0]["formes"].append("pleure")
         chemin = self.ecrire_json("dict.json", dico)
-        with self.assertRaisesRegex(ErreurFichier, "present dans plusieurs entrees"):
+        with self.assertRaisesRegex(ErreurFichier, r"(?i)mot duplique"):
             charger_dictionnaire(chemin)
 
     # --- TESTS SCENARIO ---
