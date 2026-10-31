@@ -1,51 +1,60 @@
-"""
-le simulateur:cad l'appartement reel.
-  - il repond a la question "qu'y a-t-il autour du robot ?" (percevoir) ;
-  - il execute les actions du robot et refuse celles qui sont illegales
-    (avancer dans un mur, donner sans etre a cote du resident)
-
-"""
-
 from planification import DIRECTIONS
 
 
 class ActionIllegale(Exception):
-    """le robot a tente une action que la realite interdit.
-    si elle est levee, c'est qu'il y a un bug dans l'agent."""
+    """
+    Le robot a tenté une action que la réalite interdit.
+    Si elle est levée, c'est qu'il y a un bug dans l'agent.
+    """
 
 
-# Ce que le robot peut percevoir sur une case. Le symbole 'depart du robot'
-# de la legende est une case libre comme une autre.
+# Ce que le robot peut percevoir sur une case.
+# Le symbole 'depart du robot' de la legende est une case libre comme une autre.
 TRADUCTION_LEGENDE = {
-    "mur": "mur",
-    "libre": "libre",
+    "mur"            : "mur",
+    "libre"          : "libre",
     "depart du robot": "libre",
-    "armoire": "armoire",
-    "dictionnaire": "dictionnaire",
-    "resident": "resident",
+    "armoire"        : "armoire",
+    "dictionnaire"   : "dictionnaire",
+    "resident"       : "resident",
 }
 
 
 class Monde:
-
-    def __init__(self, carte):
+    def __init__(self, carte, armoire = None):
         self._grille = carte["grille"]
-        # legende : symbole: ex. "#" -> "mur", "R" -> "libre"
-        self._types = {symbole: TRADUCTION_LEGENDE[nom]
-                       for symbole, nom in carte["legende"].items()}
+        self._types = {
+            symbole: TRADUCTION_LEGENDE[nom]
+            for symbole, nom in carte["legende"].items()
+        }
 
         self.hauteur = carte["dimensions"]["hauteur"]
         self.largeur = carte["dimensions"]["largeur"]
 
-        # --- L'etat de la simulation ----------------------------------------
         self.position_robot = tuple(carte["depart_robot"])
         self.objet_porte = None          # le robot porte au plus un objet
 
         # Positions utiles pour verifier les actions
         self.position_armoire = tuple(carte["armoire"]["position"])
         self.position_dictionnaire = tuple(carte["dictionnaire"]["position"])
-        self.position_residents = {r["id"]: tuple(r["position"])
-                                   for r in carte["residents"]}
+        self.position_residents = {
+            r["id"]: tuple(r["position"])
+            for r in carte["residents"]
+        }
+
+        if armoire is not None:
+            self.hauteur_armoire = len(armoire.get("intensites", ["faible", "moyenne", "forte"]))
+            self.largeur_armoire = len(armoire.get("emotions", ["joie", "confiance", "peur", "surprise", "tristesse", "degout", "colere", "anticipation"]))
+            self.position_selecteur = list(armoire.get("casier_depart", [1, 0]))
+            self.casiers = {
+                (c["ligne"], c["colonne"]): c.get("objet")
+                for c in armoire.get("casiers", [])
+            }
+        else:
+            self.hauteur_armoire = 3
+            self.largeur_armoire = 8
+            self.position_selecteur = [1, 0]
+            self.casiers = {}
 
     # ------------------------------------------------------------------ #
     # Lecture de la grille (privee : le nom commence par _)
@@ -83,6 +92,14 @@ class Monde:
         return {direction: self._type_case(self._case_dans_direction(direction))
                 for direction in DIRECTIONS}
 
+    def contenu_casier(self) -> str | None:
+        """Contenu de l'objet dans le casier devant lequel se trouve le selecteur,
+        uniquement si le robot est adjacent a l'armoire. None sinon.
+        """
+        if not self._est_adjacent(self.position_armoire):
+            return None
+        return self.casiers.get(tuple(self.position_selecteur))
+
     # ------------------------------------------------------------------ #
     # Actions (enonce, section 3.4)
     # ------------------------------------------------------------------ #
@@ -104,6 +121,33 @@ class Monde:
             raise ActionIllegale(
                 f"CONSULTER depuis {self.position_robot} : "
                 f"pas a cote du dictionnaire {self.position_dictionnaire}")
+
+    def chercher(self, direction: str) -> None:
+        """CHERCHER : deplace le selecteur d'un cran.
+        Le robot doit etre a cote de l'armoire.
+        Les colonnes bouclent modulo largeur_armoire. Les lignes ne bouclent pas.
+        """
+        if not self._est_adjacent(self.position_armoire):
+            raise ActionIllegale(
+                f"CHERCHER depuis {self.position_robot} : "
+                f"pas a cote de l'armoire {self.position_armoire}"
+            )
+        if direction not in DIRECTIONS:
+            raise ActionIllegale(f"direction inconnue : {direction!r}")
+
+        l, c = self.position_selecteur[0], self.position_selecteur[1]
+        if direction == "N":
+            if l == 0:
+                raise ActionIllegale("CHERCHER N depuis la ligne 0 est illegal (ne boucle pas)")
+            self.position_selecteur[0] = l - 1
+        elif direction == "S":
+            if l == self.hauteur_armoire - 1:
+                raise ActionIllegale("CHERCHER S depuis la derniere ligne est illegal (ne boucle pas)")
+            self.position_selecteur[0] = l + 1
+        elif direction == "E":
+            self.position_selecteur[1] = (c + 1) % self.largeur_armoire
+        elif direction == "O":
+            self.position_selecteur[1] = (c - 1) % self.largeur_armoire
 
     def prendre(self, objet):
         """PRENDRE : a cote de l'armoire, les mains vides.
@@ -129,25 +173,3 @@ class Monde:
             raise ActionIllegale(
                 f"DONNER '{objet}' : le robot porte {self.objet_porte!r}")
         self.objet_porte = None
-
-
-# ---------------------------------------------------------------------------
-# Petit essai : python monde.py
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import reconfort_io as rio
-
-    carte = rio.charger_carte("cartes/appartement_01.json")
-    monde = Monde(carte)
-
-    print("robot en", monde.position_robot)
-    print("percoit :", monde.percevoir())
-
-    monde.avancer("S")
-    print("apres AVANCER S, robot en", monde.position_robot)
-    print("percoit :", monde.percevoir())
-
-    try:
-        monde.avancer("O")            # (7,0) est un mur
-    except ActionIllegale as erreur:
-        print("refuse :", erreur)
