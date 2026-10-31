@@ -8,7 +8,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 import reconfort_io as rio
 from monde import ActionIllegale, Monde
@@ -16,6 +15,7 @@ from robot import Robot
 
 
 def afficher_grille(monde: Monde, robot: Robot):
+    print()
     l_r, c_r = robot.position
     for l in range(robot.hauteur):
         ligne = []
@@ -30,7 +30,7 @@ def afficher_grille(monde: Monde, robot: Robot):
 
 
 def actualiser_affichage(monde: Monde, robot: Robot, nouveaux_messages: list[str] | None = None, premiere_fois: bool = False):
-    lignes_grille = robot.hauteur + 1
+    lignes_grille = robot.hauteur + 2
 
     if not premiere_fois:
         print(f"\033[{lignes_grille}F\033[J", end="")
@@ -41,17 +41,6 @@ def actualiser_affichage(monde: Monde, robot: Robot, nouveaux_messages: list[str
 
     afficher_grille(monde, robot)
     time.sleep(0.5)
-
-
-def traiter_demande(monde: Monde, robot: Robot, trace: rio.Trace, demande: dict[str, Any]):
-    num = demande["numero"]
-    res_id = demande["resident"]
-    message = demande["message"]
-    pos_res = robot.position_residents[res_id]
-
-    actualiser_affichage(monde, robot, [f"Demande {num} pour {res_id} : {message!r}"])
-
-    # TODO : voir avec le robot + faire fonction pour journaliser
 
 
 def main(argv):
@@ -107,22 +96,26 @@ def main(argv):
         trace = rio.Trace(nom_carte=carte["nom"], nom_scenario=scenario["nom"], equipe=["FAIZE Adnan", "SELMI Eya"])
 
         actualiser_affichage(monde, robot, ["--- DEBUT DE LA SIMULATION ---"], True)
-    
+
+        def callback_affichage(messages_supplementaires: list[str] | None):
+            actualiser_affichage(monde, robot, messages_supplementaires, premiere_fois=False)
+
         for demande in scenario["demandes"]:
-            traiter_demande(monde, robot, trace, demande)
+            robot.traiter_demande(monde, demande, actualiser_affichage=callback_affichage)
 
         trace.ecrire(chemin_trace)
-        print(f"trace ecrite : {chemin_trace}")
+        print()
+        print(f"[FIN] trace ecrite : {chemin_trace}")
     except ActionIllegale as err:
         print(f"Erreur de simulation (action illegale) : {err}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         pass
-    finally: 
+    finally:
         # montrer le curseur quand on quite le programme
-        sys.stdout.write("\033[?25h") 
+        sys.stdout.write("\033[?25h")
         sys.stdout.flush()
-    
+
     return 0
 
 
